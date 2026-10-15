@@ -389,4 +389,5 @@ example commands or read your real config.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE), which also carries the MIT notice of Pi, whose example this
+extension is based on.
