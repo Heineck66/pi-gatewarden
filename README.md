@@ -118,7 +118,8 @@ and how many of those have highlighted parts.
 - **Commands:** for each risky command you edit a suggested prefix. The suggestion is the
   command and its first argument, such as `git push:*` or `rm -rf:*`. End with `:*` to
   allow every command starting with those words, or remove it to allow only this exact
-  command. A pipeline like `curl ... | sh` is suggested exactly, because the URL is what
+  command. A path with `*` limits it to a folder: `rm -f /tmp/*` allows `rm -f` on any
+  paths inside `/tmp`. A pipeline like `curl ... | sh` is suggested exactly, because the URL is what
   matters. If a prefix wouldn't let this command run, the dialog refuses it and says
   which rule still asks. Esc or an empty prefix denies the call.
 - **Files:** exactly that file with that access, and nothing inside it. In a Bash command,
@@ -192,6 +193,7 @@ built-in rules apply.
 |---|---|
 | `Bash(git push:*)` | Bash commands that start with the words `git push` |
 | `Bash(npm test)` | Exactly `npm test`, with no more words |
+| `Bash(rm -f /tmp/*)` | `rm -f` with one or more paths, all inside `/tmp` |
 | `Bash(curl -fsSL https://sh.rustup.rs \| sh)` | That exact pipeline |
 | `Bash` | Every Bash command |
 | `Read(pattern)` | `read`, `grep`, `find`, and `ls` on matching paths, and Bash commands that name them |
@@ -220,6 +222,25 @@ A tool-name rule that also matches `bash`, such as `*`, is a Bash rule too, so
   `Bash(git status:*)` doesn't allow `GIT_SSH_COMMAND=x git status` or
   `git status > notes.txt`.
 - A rule can't contain `;`, `&`, `<`, `>`, backticks, parentheses, or new lines.
+
+#### Path patterns
+
+A word that starts with `/`, `~/`, `./`, or `../` and has `*` or `?` is a path pattern.
+It matches one or more paths inside it, the way [file patterns](#how-file-patterns-match)
+do: `Bash(rm -rf ~/scratch/*)` allows `rm -rf ~/scratch/a ~/scratch/b/c` but not
+`rm -rf ~/scratch`, `rm -rf ~/scratch/a ~`, or `rm -rf ~/scratch/../.ssh`. Other words
+with `*`, like `*.log`, are compared as written.
+
+- Relative paths in the command are read from the session's folder, and relative patterns
+  like `./build/*` are anchored there.
+- Symlinks are followed: a path asks if it, or the file it reaches, is outside the folder.
+- A path with `$`, `{ }`, `[ ]`, `~user`, or a glob that could match `..` (`.*`) never
+  matches, nor does an option like `-r`. List options as words of the rule.
+- After `cd`, `pushd`, `popd`, or a new `HOME` anywhere in the command, only absolute
+  paths match.
+- `:*` after a path pattern is refused: `rm -rf /tmp/*:*` would also allow
+  `rm -rf /tmp/x ~`.
+- Path patterns work in asks and denies too: `"deny": ["Bash(rm -rf ~/*)"]`.
 
 ### How file patterns match
 
@@ -256,6 +277,12 @@ Ask before every Bash command, except a few safe ones:
   "ask": ["Bash"],
   "allow": ["Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(ls:*)", "Bash(npm test:*)"]
 }
+```
+
+Let the agent delete scratch files, but nothing else:
+
+```json
+{ "allow": ["Bash(rm -f /tmp/*)", "Bash(rm -rf /tmp/*)", "Bash(rm -rf ./dist/*)"] }
 ```
 
 Never let the agent run some commands:

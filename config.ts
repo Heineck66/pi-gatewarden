@@ -47,6 +47,10 @@ export interface Config {
 
 const KINDS: readonly string[] = ["ask", "allow", "deny"];
 
+// A Bash rule word like /tmp/*, ~/scratch/** or ./build/* is a path pattern: it matches one or more
+// paths inside it, as file patterns do. Other words, like *.log, stay literal.
+export const isPathPattern = (word: string) => /^(?:~|\.\.?)?\/.*[*?]/s.test(word);
+
 export function configPath(): string {
   // Same agent folder as Pi: PI_CODING_AGENT_DIR moves it.
   return join(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"), "permission-gate.json");
@@ -130,5 +134,9 @@ function bashPattern(inner: string, where: string) {
   if (statements.length !== 1) throw new Error(`${where}: Bash(...) needs a command; use "Bash" for every command`);
   const { stages } = statements[0];
   if (!stages.every((stage) => stage.allowable)) throw new Error(`${where}: unbalanced quote in "${inner}"`);
-  return { words: stages.flatMap((stage, i) => (i ? ["|", ...stage.words] : stage.words)), exact, pipes: stages.length - 1 };
+  const words = stages.flatMap((stage, i) => (i ? ["|", ...stage.words] : stage.words));
+  if (!exact && isPathPattern(words[words.length - 1])) {
+    throw new Error(`${where}: drop the :* after "${words[words.length - 1]}"; it already matches any number of paths, and :* would allow any words after them`);
+  }
+  return { words, exact, pipes: stages.length - 1 };
 }
