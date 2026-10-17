@@ -63,7 +63,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 test("every JSON example in the README is a valid config", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
   const examples = [...readme.matchAll(/```json\n([\s\S]*?)```/g)].map(([, json]) => json);
-  assert.equal(examples.length, 6);
+  assert.equal(examples.length, 7);
   for (const json of examples) assert.doesNotThrow(() => parseConfig(json), json);
 });
 
