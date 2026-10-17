@@ -31,7 +31,8 @@ const ONCE = "Allow once";
 const MESSAGE_HELP = "Tell the agent why, or what to do instead.";
 const SUBJECT_ROWS = 40;
 const PREFIX_HELP =
-  "End with :* to allow every command starting with these words; without it, only this exact command.";
+  "End with :* to allow every command starting with these words; without it, only this exact command. "
+  + "A path with *, like rm -f /tmp/*, matches any paths inside that folder.";
 
 const sessionLabel = (offer: Offer) => (offer.pieces.length > 0 ? "Allow for session…" : "Allow for session");
 

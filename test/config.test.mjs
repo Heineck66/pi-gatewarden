@@ -50,6 +50,7 @@ for (const [config, message] of [
   [{ allow: ["Bash(echo x > f)"] }, /can't contain/],
   [{ allow: ["Bash(a || b)"] }, /needs a command/],
   [{ allow: ["Bash(echo 'open)"] }, /unbalanced quote/],
+  [{ allow: ["Bash(rm -f /tmp/*:*)"] }, /drop the :\* after "\/tmp\/\*"/],
 ]) {
   test(`rejects ${JSON.stringify(config)}`, () => {
     assert.throws(() => parseConfig(typeof config === "string" ? config : JSON.stringify(config)), message);

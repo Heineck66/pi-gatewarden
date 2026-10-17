@@ -2,7 +2,7 @@
 // Keep every rule paired with examples in test/permission-gate.test.mjs.
 import { realpathSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import type { BashRule, PathRule, ToolRule } from "./config.ts";
+import { type BashRule, isPathPattern, type PathRule, type ToolRule } from "./config.ts";
 import { parseCommand, type Stage } from "./shell.ts";
 
 export interface Rule {
@@ -91,20 +91,49 @@ export function commandWords(words: readonly string[]): string[] {
   return rest;
 }
 
-// Whole words only: git push:* never matches git pushx.
-function matches(rule: BashRule, words: readonly string[]): boolean {
-  if (rule.exact ? words.length !== rule.words.length : words.length < rule.words.length) return false;
-  return rule.words.every((word, i) => word === words[i]);
+// Words the shell could turn into a path elsewhere: options, variables, braces, brackets, ~user,
+// a glob that can match "..", or a pipe between stages.
+const UNSURE_PATH = /^$|^-|^~[^/]|[$`{}[\]|]|(?:^|\/)\.[*?]/;
+
+// Where a path pattern's words are resolved. moved: a cd or a new HOME makes relative and ~ paths unknown.
+export interface Where extends PathContext {
+  moved: boolean;
+}
+
+// Whether a command word is a path inside a rule's path pattern, as written and through symlinks.
+function inside(pattern: string, where: Where): (word: string) => boolean {
+  const test = compilePattern({ pattern }, where);
+  return (word) => !UNSURE_PATH.test(word) && (!where.moved || word.startsWith("/"))
+    && candidates(word, where).every((path) => test(path, false));
+}
+
+// Whole words only: git push:* never matches git pushx. A path pattern matches one or more words;
+// without a context it matches none.
+function matches(rule: BashRule, words: readonly string[], where?: Where): boolean {
+  const from = (r: number, w: number): boolean => {
+    if (r === rule.words.length) return !rule.exact || w === words.length;
+    const word = rule.words[r];
+    if (!isPathPattern(word)) return word === words[w] && from(r + 1, w + 1);
+    if (!where) return false;
+    const test = inside(word, where);
+    for (let end = w; end < words.length && test(words[end]); end++) if (from(r + 1, end + 1)) return true;
+    return false;
+  };
+  return from(0, 0);
 }
 
 export const describe = (rule: { rule: string; reason?: string }) => rule.reason ?? `Matches ${rule.rule}`;
 const denial = (rule: { rule: string; reason?: string }) => `denied by ${rule.rule}${rule.reason ? ` (${rule.reason})` : ""}`;
 
-export function decideBash(command: string, userRules: readonly BashRule[] = []): Decision {
+export function decideBash(command: string, userRules: readonly BashRule[] = [], context?: PathContext): Decision {
   const pieces: Piece[] = [];
   const allows = userRules.filter((rule) => rule.kind === "allow");
   const checks = userRules.filter((rule) => rule.kind !== "allow");
-  for (const { text, stages } of parseCommand(command)) {
+  const statements = parseCommand(command);
+  const moved = statements.some(({ stages }) => stages.some(({ words }) =>
+    ["cd", "pushd", "popd"].includes(commandWords(words)[0]) || words.some((word) => word.startsWith("HOME="))));
+  const where = context && { ...context, moved };
+  for (const { text, stages } of statements) {
     const pipes = stages.length - 1;
     const join = (lists: string[][]) => lists.flatMap((words, i) => (i ? ["|", ...words] : words));
     const pipeline = join(stages.map((stage) => stage.words));
@@ -112,14 +141,14 @@ export function decideBash(command: string, userRules: readonly BashRule[] = [])
     // and an ask its word count, so a tie goes to the ask. Pipeline allows must span the pipeline.
     const covered = (strength: number, stage?: Stage) =>
       allows.some((allow) => allow.words.length > strength && (
-        (stage !== undefined && allow.pipes === 0 && stage.allowable && matches(allow, stage.words)) ||
-        (allow.pipes === pipes && stages.every((s) => s.allowable) && matches(allow, pipeline))
+        (stage !== undefined && allow.pipes === 0 && stage.allowable && matches(allow, stage.words, where)) ||
+        (allow.pipes === pipes && stages.every((s) => s.allowable) && matches(allow, pipeline, where))
       ));
     for (const stage of stages) {
       const words = commandWords(stage.words);
       const asks = new Set<string>();
       for (const rule of checks) {
-        if (rule.pipes > 0 || !matches(rule, words)) continue;
+        if (rule.pipes > 0 || !matches(rule, words, where)) continue;
         if (rule.kind === "deny") return { denied: denial(rule), reasons: [] };
         if (!covered(rule.words.length, stage)) asks.add(describe(rule));
       }
@@ -131,7 +160,7 @@ export function decideBash(command: string, userRules: readonly BashRule[] = [])
     const seen = join(stages.map((stage) => commandWords(stage.words)));
     const asks = new Set<string>();
     for (const rule of checks) {
-      if (rule.pipes === 0 || rule.pipes !== pipes || !matches(rule, seen)) continue;
+      if (rule.pipes === 0 || rule.pipes !== pipes || !matches(rule, seen, where)) continue;
       if (rule.kind === "deny") return { denied: denial(rule), reasons: [] };
       if (!covered(rule.words.length)) asks.add(describe(rule));
     }
@@ -195,17 +224,16 @@ export function expandPath(path: string, { cwd, home }: PathContext): string {
   return resolve(cwd, path);
 }
 
-// The path as written and, through symlinks, the file it reaches (or would create).
+// The path as written and, through symlinks in it or its nearest existing folder, the file it
+// reaches (or would create).
 function candidates(path: string, context: PathContext): string[] {
   const lexical = expandPath(path, context);
-  let real: string;
-  try {
-    real = realpathSync(lexical);
-  } catch {
+  let real: string | undefined;
+  for (let base = lexical, rest = ""; real === undefined; rest = join(basename(base), rest), base = dirname(base)) {
     try {
-      real = join(realpathSync(dirname(lexical)), basename(lexical));
+      real = join(realpathSync(base), rest);
     } catch {
-      return [lexical];
+      if (base === dirname(base)) return [lexical];
     }
   }
   return real === lexical ? [lexical] : [lexical, real];
@@ -218,7 +246,7 @@ function globSource(glob: string): string {
 
 // gitignore-style: without "/" a pattern names a file or folder anywhere; ~/, / and other paths are
 // anchored (relative ones to the session's folder); a leading **/ floats. A match covers its contents.
-function compilePattern({ pattern, exact }: PathRule, context: PathContext): (path: string, folder: boolean) => boolean {
+function compilePattern({ pattern, exact }: Pick<PathRule, "pattern" | "exact">, context: PathContext): (path: string, folder: boolean) => boolean {
   // Session allows name one absolute path and nothing below it.
   if (exact) return (path) => path === pattern;
   const glob = pattern.replace(/(.)\/+$/, "$1");

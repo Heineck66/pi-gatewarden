@@ -205,6 +205,47 @@ test("symlinks are followed to the file they reach", () => {
   assert.deepEqual(bashFileAsks("cat innocent.txt"), [SSH]);
 });
 
+// scratch/{a/, out -> home}
+const scratch = join(fsRoot, "scratch");
+mkdirSync(join(scratch, "a"), { recursive: true });
+symlinkSync(home, join(scratch, "out"));
+const where = { cwd: project, home };
+const decideIn = (command, config) => decideBash(command, parseConfig(JSON.stringify(config)).bash, where);
+
+test("a path pattern in a Bash allow matches one or more paths inside its folder", () => {
+  const config = { allow: [`Bash(rm -f ${scratch}/*)`] };
+  for (const command of [
+    `rm -f ${scratch}/a`, `rm -f ${scratch}/a/new.db`, `rm -f ${scratch}/a ${scratch}/b`, `rm -f ${scratch}/build-*`,
+    `rm -f ${scratch}/a/../b`, `cd / && rm -f ${scratch}/a`,
+  ]) assert.deepEqual(decideIn(command, config).reasons, [], command);
+  for (const command of [
+    `rm -f ${scratch}`, `rm -f ${scratch}/`, `rm -f ${scratch}/a /etc/hosts`, `rm -f ${scratch}/../home`, `rm -rf ${scratch}/a`,
+    `rm -f ${scratch}/a -r`, `rm -f ${scratch}/out/x`, `rm -f ${scratch}/out/new/deep`, `rm -f ${scratch}/{..,a}/x`,
+    `rm -f ${scratch}/.*`, `rm -f ${scratch}/$X`, `rm -f -- ${scratch}/a`, "rm -f",
+  ]) assert.deepEqual(decideIn(command, config).reasons, ["Delete files or directories"], command);
+  // Without a context, as in old callers, a path pattern never matches.
+  assert.ok(asks(`rm -f ${scratch}/a`, config));
+});
+
+test("relative and ~ path patterns follow the session's folder and home, until a cd or a new HOME", () => {
+  const relative = { allow: ["Bash(rm ./tmp/*)"] };
+  for (const command of ["rm tmp/x", "rm ./tmp/x", `rm ${project}/tmp/x`]) assert.deepEqual(decideIn(command, relative).reasons, [], command);
+  for (const command of ["rm tmp", "rm x", "cd .. && rm tmp/x", "pushd /; rm tmp/x"]) assert.ok(decideIn(command, relative).reasons.length > 0, command);
+  const tilde = { allow: ["Bash(rm ~/project/*)"] };
+  assert.deepEqual(decideIn("rm ~/project/x", tilde).reasons, []);
+  assert.deepEqual(decideIn("rm tmp/x", tilde).reasons, []);
+  for (const command of ["HOME=/ ; rm ~/project/x", "export HOME=/; rm ~/project/x", "rm ~root/project/x"]) {
+    assert.ok(decideIn(command, tilde).reasons.length > 0, command);
+  }
+});
+
+test("path patterns work in asks and denies, and other words with * stay literal", () => {
+  assert.match(decideIn("rm -rf ~/project", { deny: ["Bash(rm -rf ~/*)"] }).denied, /denied by Bash\(rm -rf ~\/\*\)/);
+  assert.ok(!decideIn("rm -rf /tmp/x", { deny: ["Bash(rm -rf ~/*)"] }).denied);
+  assert.deepEqual(decideIn("ls x.log", { ask: ["Bash(ls *.log)"] }).reasons, []);
+  assert.deepEqual(decideIn("ls *.log", { ask: ["Bash(ls *.log)"] }).reasons, ["Matches Bash(ls *.log)"]);
+});
+
 test("folder searches ask above anchored rules; name rules only match the file itself", () => {
   assert.ok(fileAsks("~", "read", {}, true).includes(SSH));
   assert.ok(fileAsks("/", "read", {}, true).includes(SSH));

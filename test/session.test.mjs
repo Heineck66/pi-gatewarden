@@ -40,6 +40,14 @@ test("a prefix must parse and let the piece run", () => {
   assert.deepEqual(checkPrefix("git push:*", piece, []).rule.words, ["git", "push"]);
 });
 
+test("a session prefix can name a folder, as in rm -f /tmp/*", () => {
+  const context = { cwd: "/project", home: "/home/me" };
+  const [piece] = decideBash("rm -f /tmp/houseapp-checks/smoke.db", [], context).pieces;
+  assert.equal(checkPrefix("rm -f /tmp/*", piece, [], context).error, undefined);
+  assert.match(checkPrefix("rm -f /var/*", piece, [], context).error, /Still asks/);
+  assert.match(checkPrefix("rm -f /tmp/*:*", piece, [], context).error, /drop the :\*/);
+});
+
 test("a session prefix can't beat a user ask of the same length", () => {
   const rules = bash({ ask: ["Bash(kubectl delete:*)"] });
   const [piece] = pieces("kubectl delete pod x", rules);

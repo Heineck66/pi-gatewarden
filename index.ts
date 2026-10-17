@@ -156,7 +156,7 @@ export default function permissionGate(pi: ExtensionAPI) {
     const bash = event.toolName === "bash";
     const command = event.input.command as string;
     const call = bash
-      ? decideBash(command, bashRules())
+      ? decideBash(command, bashRules(), { cwd: ctx.cwd, home })
       : decideTool(event.toolName, [...config.rules.tools, ...session.tools]);
     const files = decidePaths(
       bash ? bashTargets(command) : toolTargets(event.toolName, event.input),
@@ -179,12 +179,12 @@ export default function permissionGate(pi: ExtensionAPI) {
     const bash = event.toolName === "bash";
     const offer: Offer | undefined = sessionAllowed(found.pieces, found.files)
       ? {
-        pieces: found.pieces.map((piece) => ({ text: piece.text, suggestion: suggestPrefix(piece, bashRules()) })),
+        pieces: found.pieces.map((piece) => ({ text: piece.text, suggestion: suggestPrefix(piece, bashRules(), { cwd: ctx.cwd, home }) })),
         also: [
           ...found.files.map((file) => `${file.access === "edit" ? "change" : "read"} ${tilde(file.path)}`),
           ...(found.tool ? [`every ${found.tool} call`] : []),
         ],
-        check: (index, prefix) => checkPrefix(prefix, found.pieces[index], bashRules()).error,
+        check: (index, prefix) => checkPrefix(prefix, found.pieces[index], bashRules(), { cwd: ctx.cwd, home }).error,
       }
       : undefined;
     return {
@@ -202,7 +202,7 @@ export default function permissionGate(pi: ExtensionAPI) {
 
   function allowForSession(found: Check, prefixes: string[], ctx: ExtensionContext) {
     const bash = prefixes.map((prefix, i) => {
-      const { rule, error } = checkPrefix(prefix, found.pieces[i], bashRules());
+      const { rule, error } = checkPrefix(prefix, found.pieces[i], bashRules(), { cwd: ctx.cwd, home });
       if (!rule) throw new Error(error); // Fails closed in the caller.
       return rule;
     });
