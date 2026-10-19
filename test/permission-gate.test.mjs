@@ -871,7 +871,7 @@ test("RPC: Deny with message… asks for the message in an editor", async () => 
   assert.deepEqual(h.prompts[0][1], ["Deny", "Allow once", "Allow for session…", "Deny with message…", "Ask why"]);
 });
 
-test("TUI dialog: ? blocks and asks the agent to explain, then make the same call again; in the message field it is text", async () => {
+test("TUI dialog: ? blocks and asks the agent to explain, then wait for the user; in the message field it is text", async () => {
   const h = harness({ mode: "tui" });
   const result = h.call();
   await nextTick();
@@ -883,8 +883,8 @@ test("TUI dialog: ? blocks and asks the agent to explain, then make the same cal
   const { block, reason } = await result;
   assert.equal(block, true);
   assert.match(reason, /^Permission gate: the user wants an explanation before deciding\. The gate asked because: Delete files or directories\.\n/);
-  assert.match(reason, /Reply to the user in a visible message, not only in your thinking/);
-  assert.match(reason, /Then make the same call again, unchanged, so the user can decide\. If you no longer need it, say so/);
+  assert.match(reason, /\nReply to the user in two or three sentences: why this call is needed/);
+  assert.match(reason, /Then stop and wait for the user's answer; do not make this call again, or try another way, until the user says to\.$/);
 
   const writing = h.call();
   await nextTick();

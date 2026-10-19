@@ -249,11 +249,10 @@ export default function permissionGate(pi: ExtensionAPI) {
           return {
             block: true,
             reason: `Permission gate: the user wants an explanation before deciding. The gate asked because: ${found.reasons.join("; ")}.\n`
-              // Without "visible", models explain in their thinking, which the user may not see.
-              + "Reply to the user in a visible message, not only in your thinking: in two or three sentences, "
-              + "say why this call is needed for the task and what it will change or read "
-              + "(which files, and whether it can be undone). Then make the same call again, unchanged, so the user can decide. "
-              + "If you no longer need it, say so and don't make it.",
+              + "Reply to the user in two or three sentences: why this call is needed for the task and what it will change "
+              + "or read (which files, and whether it can be undone). If you no longer need it, say so instead. "
+              // Waiting matters: an explanation written just before a repeated call lands in the model's thinking, unseen.
+              + "Then stop and wait for the user's answer; do not make this call again, or try another way, until the user says to.",
           };
         }
         if (answer.choice === "session") allowForSession(found, answer.prefixes, ctx);

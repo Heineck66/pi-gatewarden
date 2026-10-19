@@ -20,7 +20,7 @@ export interface Offer {
 
 export type Answer =
   | { choice: "deny"; message?: string } // The message, when given, goes to the agent.
-  | { choice: "explain" } // Blocks, and the agent explains before making the call again.
+  | { choice: "explain" } // Blocks, and the agent explains, then waits for the user.
   | { choice: "once" }
   | { choice: "session"; prefixes: string[] };
 
