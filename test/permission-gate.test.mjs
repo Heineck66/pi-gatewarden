@@ -883,6 +883,7 @@ test("TUI dialog: ? blocks and asks the agent to explain, then make the same cal
   const { block, reason } = await result;
   assert.equal(block, true);
   assert.match(reason, /^Permission gate: the user wants an explanation before deciding\. The gate asked because: Delete files or directories\.\n/);
+  assert.match(reason, /Reply to the user in a visible message, not only in your thinking/);
   assert.match(reason, /Then make the same call again, unchanged, so the user can decide\. If you no longer need it, say so/);
 
   const writing = h.call();

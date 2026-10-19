@@ -92,9 +92,9 @@ The parts that asked, here `rm -rf dist/cache` and `.env`, are shown in red.
 - **Tab** on Deny opens a message field: say why, or what to do instead ("use trash",
   "why do you need to delete this?"). Enter denies and sends the message to the agent,
   which is told to follow it. Esc goes back to the choices; an empty message is a plain deny.
-- **?** asks the agent why. The call is blocked, and the agent is told to say in two or
-  three sentences why it needs the call and what it will change or read, then make the
-  same call again. The dialog opens again under its explanation. If the agent no longer
+- **?** asks the agent why. The call is blocked, and the agent is told to reply in two or
+  three sentences, in the chat and not only in its thinking, why it needs the call and
+  what it will change or read, then make the same call again. The dialog opens again under its explanation. If the agent no longer
   needs the call, it says so instead. In the message field, `?` is just text.
 - The arrow keys or j/k move. Any other key moves the selection back to Deny, so text
   meant for the editor ends on Deny unless its last letter is j: in "just do it" the j

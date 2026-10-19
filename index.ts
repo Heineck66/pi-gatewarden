@@ -249,7 +249,9 @@ export default function permissionGate(pi: ExtensionAPI) {
           return {
             block: true,
             reason: `Permission gate: the user wants an explanation before deciding. The gate asked because: ${found.reasons.join("; ")}.\n`
-              + "In two or three sentences, say why this call is needed for the task and what it will change or read "
+              // Without "visible", models explain in their thinking, which the user may not see.
+              + "Reply to the user in a visible message, not only in your thinking: in two or three sentences, "
+              + "say why this call is needed for the task and what it will change or read "
               + "(which files, and whether it can be undone). Then make the same call again, unchanged, so the user can decide. "
               + "If you no longer need it, say so and don't make it.",
           };
