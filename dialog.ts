@@ -20,6 +20,7 @@ export interface Offer {
 
 export type Answer =
   | { choice: "deny"; message?: string } // The message, when given, goes to the agent.
+  | { choice: "explain" } // Blocks, and the agent explains, then waits for the user.
   | { choice: "once" }
   | { choice: "session"; prefixes: string[] };
 
@@ -28,6 +29,7 @@ type Theme = ExtensionContext["ui"]["theme"];
 const DENY = "Deny";
 const DENY_WITH_MESSAGE = "Deny with message…";
 const ONCE = "Allow once";
+const EXPLAIN = "Ask why";
 const MESSAGE_HELP = "Tell the agent why, or what to do instead.";
 const SUBJECT_ROWS = 40;
 const PREFIX_HELP =
@@ -164,6 +166,7 @@ export function askTui(ctx: ExtensionContext, prompt: Prompt, signal?: AbortSign
         update();
       } else if (keybindings.matches(data, "tui.select.confirm")) choose();
       else if (keybindings.matches(data, "tui.select.cancel")) deny();
+      else if (matchesKey(data, "?")) done({ choice: "explain" });
       else if (keybindings.matches(data, "tui.input.tab")) {
         if (selected === 0) write(true);
       } else if (selected !== 0) {
@@ -194,7 +197,7 @@ export function askTui(ctx: ExtensionContext, prompt: Prompt, signal?: AbortSign
         lines.push("");
         if (offer && selected === 2) lines.push(...wrap(theme.fg("muted", sessionHint(offer))));
         const tab = selected === 0 ? " · Tab add a message" : "";
-        lines.push(...wrap(theme.fg("dim", `↑↓ or j/k choose · Enter confirm${tab} · Esc deny`)));
+        lines.push(...wrap(theme.fg("dim", `↑↓ or j/k choose · Enter confirm${tab} · ? ask why · Esc deny`)));
       } else {
         const count = offer!.pieces.length;
         lines.push(...wrap(theme.fg("accent", theme.bold(`Allow for this session${count > 1 ? ` (${step + 1} of ${count})` : ""}`))), "");
@@ -228,7 +231,7 @@ export function askTui(ctx: ExtensionContext, prompt: Prompt, signal?: AbortSign
 // RPC clients get Pi's select, then an editor for the denial message or each prefix.
 export async function askRpc(ctx: ExtensionContext, prompt: Prompt, signal?: AbortSignal): Promise<Answer> {
   const offer = prompt.session;
-  const options = [DENY, ONCE, ...(offer ? [sessionLabel(offer)] : []), DENY_WITH_MESSAGE];
+  const options = [DENY, ONCE, ...(offer ? [sessionLabel(offer)] : []), DENY_WITH_MESSAGE, EXPLAIN];
   const title = [
     "Permission required",
     ...prompt.reasons.map((reason) => `• ${reason}`),
@@ -239,6 +242,7 @@ export async function askRpc(ctx: ExtensionContext, prompt: Prompt, signal?: Abo
   ].join("\n");
   const choice = await ctx.ui.select(displayText(title), options, { signal });
   if (choice === ONCE) return { choice: "once" };
+  if (choice === EXPLAIN) return { choice: "explain" };
   if (choice === DENY_WITH_MESSAGE && !signal?.aborted) {
     const message = (await ctx.ui.editor(`${MESSAGE_HELP} Leave it empty to deny without one.`, ""))?.trim();
     return message ? { choice: "deny", message } : { choice: "deny" };
