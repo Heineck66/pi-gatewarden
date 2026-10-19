@@ -82,7 +82,7 @@ Everything else runs without asking.
    Allow once
    Allow for session…
 
- ↑↓ or j/k choose · Enter confirm · Tab add a message · Esc deny
+ ↑↓ or j/k choose · Enter confirm · Tab add a message · ? ask why · Esc deny
 ───────────────────────────────────────────
 ```
 
@@ -92,9 +92,14 @@ The parts that asked, here `rm -rf dist/cache` and `.env`, are shown in red.
 - **Tab** on Deny opens a message field: say why, or what to do instead ("use trash",
   "why do you need to delete this?"). Enter denies and sends the message to the agent,
   which is told to follow it. Esc goes back to the choices; an empty message is a plain deny.
+- **?** asks the agent why. The call is blocked, and the agent is told to say in two or
+  three sentences why it needs the call and what it will change or read, then make the
+  same call again. The dialog opens again under its explanation. If the agent no longer
+  needs the call, it says so instead. In the message field, `?` is just text.
 - The arrow keys or j/k move. Any other key moves the selection back to Deny, so text
   meant for the editor ends on Deny unless its last letter is j: in "just do it" the j
-  moves down and the u moves back. Whatever you had typed before the dialog opened is
+  moves down and the u moves back. A `?` in that text asks the agent why, which costs a
+  turn but never allows anything. Whatever you had typed before the dialog opened is
   still in the editor afterwards.
 - **Allow once** runs this call only.
 - **Allow for session…** runs it and allows similar calls until `/reload`, a restart, or
@@ -340,7 +345,8 @@ still stops at `.env` and `~/.ssh`.
 - **Print and JSON mode** have no dialog, so anything that would ask is blocked instead.
   With `--no-permission-gate`, only file rules and denies block.
 - **RPC clients** get Pi's select dialog, then an editor prefilled with each session
-  prefix. **Deny with message…** opens an editor for the message to the agent. A cancelled dialog denies. A client that never answers leaves the call waiting
+  prefix. **Deny with message…** opens an editor for the message to the agent. **Ask why**
+  does what `?` does in the terminal. A cancelled dialog denies. A client that never answers leaves the call waiting
   until the turn is aborted.
 - **Herdr**: while a dialog is open, the gate emits `herdr:blocked`, so Herdr shows the
   pane as waiting for you. To run a Herdr agent without Bash prompts, start it with

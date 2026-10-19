@@ -380,7 +380,7 @@ for (const choice of ["Deny", undefined, "Yes", "Allow always"]) {
   test(`blocks unless explicitly allowed: ${choice}`, async () => {
     const h = harness({ select: async () => choice });
     assert.equal((await h.call()).block, true);
-    assert.deepEqual(h.prompts[0][1], ["Deny", "Allow once", "Allow for session…", "Deny with message…"]);
+    assert.deepEqual(h.prompts[0][1], ["Deny", "Allow once", "Allow for session…", "Deny with message…", "Ask why"]);
     assert.match(h.prompts[0][0], /\/example\/project/);
     assert.match(h.prompts[0][0], /rm -rf build/);
   });
@@ -744,7 +744,7 @@ test("a chain gets one prefix per risky piece", async () => {
 test("file and tool session allows cover exactly that file, access, or tool", async () => {
   const h = harness({ select: sessionOnce(), config: { ask: ["mcp__*"] } });
   assert.equal(await h.callTool("read", { path: ".env" }), undefined);
-  assert.deepEqual(h.prompts[0][1], ["Deny", "Allow once", "Allow for session", "Deny with message…"]); // Nothing to edit.
+  assert.deepEqual(h.prompts[0][1], ["Deny", "Allow once", "Allow for session", "Deny with message…", "Ask why"]); // Nothing to edit.
   assert.match(h.prompts[0][0], /Allows read \/example\/project\/\.env until \/reload/);
   assert.equal(h.editors.length, 0);
   assert.equal(await h.callTool("read", { path: "/example/project/.env" }), undefined);
@@ -771,7 +771,7 @@ test("no session allow for the gate's config file or for pieces no allow can cov
   await h.callTool("write", { path: h.configFile, content: "{}" });
   await h.call("echo $(rm -rf build)");
   await h.call("rm -rf build > log.txt");
-  assert.deepEqual(h.prompts.map(([, options]) => options.length), [3, 3, 3]);
+  assert.deepEqual(h.prompts.map(([, options]) => options.length), [4, 4, 4]);
 });
 
 test("session allows survive /gate off, on, and reload; /gate clear drops them; /permissions lists them", async () => {
@@ -839,7 +839,7 @@ test("TUI dialog: Tab on Deny writes a message for the agent; Esc goes back, emp
   const result = h.call();
   await nextTick();
   const [dialog] = h.dialogs;
-  assert.match(lines(dialog), /Enter confirm · Tab add a message · Esc deny/);
+  assert.match(lines(dialog), /Enter confirm · Tab add a message · /);
   dialog.handleInput("tui.select.down");
   assert.doesNotMatch(lines(dialog), /Tab/);
   dialog.handleInput("tui.input.tab"); // Only on Deny.
@@ -866,9 +866,39 @@ test("TUI dialog: Tab on Deny writes a message for the agent; Esc goes back, emp
 });
 
 test("RPC: Deny with message… asks for the message in an editor", async () => {
-  const h = harness({ select: async (_title, options) => options.at(-1), editor: async () => "  why rm?  " });
+  const h = harness({ select: async () => "Deny with message…", editor: async () => "  why rm?  " });
   assert.match((await h.call()).reason, /The user says: why rm\?\n/);
-  assert.deepEqual(h.prompts[0][1], ["Deny", "Allow once", "Allow for session…", "Deny with message…"]);
+  assert.deepEqual(h.prompts[0][1], ["Deny", "Allow once", "Allow for session…", "Deny with message…", "Ask why"]);
+});
+
+test("TUI dialog: ? blocks and asks the agent to explain, then make the same call again; in the message field it is text", async () => {
+  const h = harness({ mode: "tui" });
+  const result = h.call();
+  await nextTick();
+  const [dialog] = h.dialogs;
+  assert.match(lines(dialog), /Enter confirm · Tab add a message · \? ask why · Esc deny/);
+  dialog.handleInput("tui.select.down"); // Works from any choice, not only Deny.
+  assert.match(lines(dialog), /\? ask why/);
+  dialog.handleInput("?");
+  const { block, reason } = await result;
+  assert.equal(block, true);
+  assert.match(reason, /^Permission gate: the user wants an explanation before deciding\. The gate asked because: Delete files or directories\.\n/);
+  assert.match(reason, /Then make the same call again, unchanged, so the user can decide\. If you no longer need it, say so/);
+
+  const writing = h.call();
+  await nextTick();
+  h.dialogs[1].handleInput("tui.input.tab");
+  h.dialogs[1].handleInput("?");
+  h.dialogs[1].handleInput("tui.input.submit");
+  assert.match((await writing).reason, /The user says: \?\n/);
+});
+
+test("RPC: Ask why explains file calls too", async () => {
+  const h = harness({ select: async () => "Ask why" });
+  const { block, reason } = await h.callTool("read", { path: ".env" });
+  assert.equal(block, true);
+  assert.match(reason, /The gate asked because: Secrets: \.env file\.\n/);
+  assert.equal(h.editors.length, 0);
 });
 
 test("TUI dialog: arrows choose, Esc denies, and Allow once runs once", async () => {

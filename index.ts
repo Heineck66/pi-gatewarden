@@ -245,6 +245,15 @@ export default function permissionGate(pi: ExtensionAPI) {
               + "Follow the user's message; do not otherwise retry this with a different command or tool.",
           };
         }
+        if (answer.choice === "explain") {
+          return {
+            block: true,
+            reason: `Permission gate: the user wants an explanation before deciding. The gate asked because: ${found.reasons.join("; ")}.\n`
+              + "In two or three sentences, say why this call is needed for the task and what it will change or read "
+              + "(which files, and whether it can be undone). Then make the same call again, unchanged, so the user can decide. "
+              + "If you no longer need it, say so and don't make it.",
+          };
+        }
         if (answer.choice === "session") allowForSession(found, answer.prefixes, ctx);
         return undefined;
       } catch {
